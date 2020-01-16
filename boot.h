@@ -13,10 +13,12 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include "Server_Side.h"
+#include <queue>
 using namespace Server_Side;
 using namespace std;
 #endif //HW4GALANDAMIT__BOOT_H_
 
+bool flag = true;
 
 class FileCacheManager: public CacheManager {
   virtual bool problemExist(string problem) {
@@ -55,36 +57,15 @@ class FileCacheManager: public CacheManager {
 };
 
 class MySerialServer: public Server {
-  bool flag = true;
 
   virtual void open(int port, ClientHandler* c) {
-    thread threadServer(MySerialServer::openServer, port, c);
-    threadServer.join();
-  }
-
-  virtual void stop() {
-    flag = false;
-  }
-
-  static void openServer(int port, ClientHandler* c) {
+    queue<int> clientQueue;
     int clientSocket;
     char buffer[1024] = {0};
-
-    clientSocket = getClientInfo(port);
-    read(clientSocket, buffer, 1024);
-    cout << buffer << endl;
-    if (strlen(buffer) != 0) {
-      c->handleClient(buffer, "");
-    }
-  }
-
-
-  static int getClientInfo(int port) {
-    std::string::size_type sz;
     int socketfd = socket(AF_INET, SOCK_STREAM, 0);
     if (socketfd == -1) {
       cerr << "Could not create a Socket" << endl;
-      return -1;
+      //client_socket -1;
     }
     sockaddr_in address;
     address.sin_family = AF_INET;
@@ -92,20 +73,44 @@ class MySerialServer: public Server {
     address.sin_port = htons(port);
     if (bind(socketfd, (struct sockaddr *) &address, sizeof(address)) == -1) {
       std::cerr << "could not bind the socket to an IP" << std::endl;
-      return -1;
     }
-    if (listen(socketfd, 5) == -1) {
-      std::cerr << "error during listening" << std::endl;
-      return -2;
+    thread threadServer(MySerialServer::getClientInfo, port, &clientQueue, socketfd, address);
+    sleep(12);
+    while (!clientQueue.empty()) {
+      read(clientQueue.front(), buffer, 1024);
+      clientQueue.pop();
+      cout << buffer << endl;
+      if (strlen(buffer) != 0) {
+        c->handleClient(buffer, "");
+      }
     }
-    int client_socket = accept(socketfd, (struct sockaddr *) &address, (socklen_t *) &address);
-    if ((client_socket) < 0) {
-      std::cerr << "error accepting client" << std::endl;
-      return -3;
-    }
-    return client_socket;
+    threadServer.join();
   }
 
+  static void getClientInfo(int port, queue<int>* queue, int socketfd, sockaddr_in address) {
+    int client_socket;
+    std::string::size_type sz;
+    while (flag) {
+      if (listen(socketfd, 5) == -1) {
+        std::cerr << "error during listening" << std::endl;
+        client_socket -2;
+      }
+      struct timeval tv;
+      tv.tv_sec = 10;
+      setsockopt(socketfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+      client_socket = accept(socketfd, (struct sockaddr *) &address, (socklen_t *) &address);
+      if ((client_socket) < 0) {
+        std::cerr << "error accepting client" << std::endl;
+        flag = false;
+      } else {
+        queue->push(client_socket);
+      }
+    }
+  }
+
+  virtual void stop() {
+    flag = false;
+  }
 };
 
 class MyTestClientHandler: public ClientHandler {
