@@ -14,6 +14,7 @@
 #include <netinet/in.h>
 #include "Server_Side.h"
 #include <queue>
+#include <mutex>
 using namespace Server_Side;
 using namespace std;
 #endif //HW4GALANDAMIT__BOOT_H_
@@ -75,22 +76,25 @@ class MySerialServer: public Server {
       std::cerr << "could not bind the socket to an IP" << std::endl;
     }
     thread threadServer(MySerialServer::getClientInfo, port, &clientQueue, socketfd, address);
-    sleep(12);
+    sleep(5);
     while (!clientQueue.empty()) {
       read(clientQueue.front(), buffer, 1024);
       clientQueue.pop();
-      cout << buffer << endl;
+      cout << buffer << "\n"<<endl;
       if (strlen(buffer) != 0) {
         c->handleClient(buffer, "");
       }
+      sleep(2);
     }
     threadServer.join();
   }
 
   static void getClientInfo(int port, queue<int>* queue, int socketfd, sockaddr_in address) {
+    mutex mutex;
     int client_socket;
     std::string::size_type sz;
     while (flag) {
+      mutex.lock();
       if (listen(socketfd, 5) == -1) {
         std::cerr << "error during listening" << std::endl;
         client_socket -2;
@@ -105,6 +109,7 @@ class MySerialServer: public Server {
       } else {
         queue->push(client_socket);
       }
+      mutex.unlock();
     }
   }
 
@@ -124,10 +129,10 @@ class MyTestClientHandler: public ClientHandler {
       return;
     } else {
       if (cm->problemExist(input)) {
-        cout<<(cm->getSolution(input))<<endl;
+        cout<<(cm->getSolution(input))<< "\n"<<endl;
       } else {
         Solver* solution = solver->solve(input);
-        cout<<solution->toString() <<endl;
+        cout<<solution->toString() << "\n"<<endl;
         cm->addSolution(input, solution);
       }
     }
